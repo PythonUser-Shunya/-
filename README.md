@@ -5,4 +5,4 @@
 
 以下の画像は一例です
 
-![image](https://user-images.githubusercontent.com/83391015/118625798-48c2b800-b805-11eb-99be-f3e197aeeb90.png)
+![image](https://user-images.githubusercontent.com/83391015/118645837-66e6e300-b81a-11eb-8c4e-ccee666f17ab.png)
