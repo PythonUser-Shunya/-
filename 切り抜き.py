@@ -1,26 +1,23 @@
 import cv2
 import os
 import glob
-import shutil
 
-temporary = []
+# count_rectangle_number = []
 folder_path = input("フォルダのパスを入力してください：").strip('"')
-# フォルダ作成
-
-
 files = glob.glob(folder_path + "/*/*/*.AVI")
 shot_max = int(input("1動画で何枚トリミングしますか？："))
-jpg_number = 1
+fgbg = cv2.createBackgroundSubtractorMOG2()
 
-
+# pathから動画のファイル名を作る関数
 def make_file_name(path):
-    str_list = path.split("\\")
-    #.AVIを消してる
-    str_list[-1] = str_list[-1][:-4]
-    name = "_".join(str_list[2:])
+    name = os.path.splitext(os.path.basename(path))[0]
     return name
 
-
+def make_new_folder(path):
+    p = os.path.split(path)[0]
+    new = p.replace("空打ち検証データ", "trimming_image2") + "\\"
+    new = new.replace("\\", "/")
+    return new
 
 for path in files:
     cap = cv2.VideoCapture(path)
@@ -30,70 +27,57 @@ for path in files:
     i = 0
     max_number = 0
     shot = 0
-    name = make_file_name(path)
+    jpg_number = 1
+
     while True:
         #  OpenCVでWebカメラの画像を取り込む
-
         ret, frame = cap.read()
         if frame is None:
             break
 
-        # 取り込んだフレームに対して差分をとって動いているところが明るい画像を作る
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        if before is None:
-            before = gray.copy().astype('float')
-            continue
-        # 現フレームと前フレームの加重平均を使うと良いらしい
-        cv2.accumulateWeighted(gray, before, 0.1)
-        mdframe = cv2.absdiff(gray, cv2.convertScaleAbs(before))
-
-        # 動いているエリアの面積を計算してちょうどいい検出結果を抽出する
-        thresh = cv2.threshold(mdframe, 2, 255, cv2.THRESH_BINARY)[1]
+        fgmask = fgbg.apply(frame)
         # 輪郭データに変換しくれるfindContours
-        contours, hierarchy = cv2.findContours(thresh.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        contours, hierarchy = cv2.findContours(fgmask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         max_area = 0
-        target = contours[0]
+        try:
+            target = contours[0]
+        except IndexError:
+            pass
+
         for cnt in contours:
             #輪郭の面積を求めてくれるcontourArea
             area = cv2.contourArea(cnt)
             if area > 1000:
-                max_area = area;
+                max_area = area
                 target = cnt
 
         #動いているエリアのうちそこそこの大きさのものがあればそれを矩形で表示する
         if max_area <= 1000:
-                areaframe = frame
+            areaframe = frame
         else:
             #矩形検出
-            x,y,w,h = cv2.boundingRect(target)
-            areaframe = cv2.rectangle(frame,(x,y),(x+w,y+h),(0,255,0),2)
+            x, y, w, h = cv2.boundingRect(target)
+            areaframe = cv2.rectangle(
+                frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
             if areaframe is None:
-                temporary.append(0)
+                max_number = 0
             else:
                 i += 1
-                temporary.append(i)
-                max_number = temporary[-1]
-                if max_number >= 50 and max_number % 10 == 0 :
-                    cv2.imwrite(name + "_" + str(jpg_number) + '.jpg', frame[y: y+h, x:x+w])
+                max_number = i
+                if max_number >= 50 and max_number % 10 == 0:
+                    new_folder_path = make_new_folder(path)
+                    os.makedirs(new_folder_path, exist_ok=True)
+                    name = make_file_name(path)
+                    save_file_name = name + "_" + str(jpg_number) + '.jpg'
+                    save_abs_path = os.path.join(
+                        new_folder_path, save_file_name)
+                    cv2.imwrite(save_abs_path, frame[y: y+h, x:x+w])
+                    if cv2.waitKey(10) == 27:
+                        break
                     shot += 1
                     jpg_number += 1
-                    jpgs = glob.glob("*.jpg")
-                    new_folder_path = "C:/保存画像/" + "/".join(name.split("_")[:2])
-
-                    if not os.path.exists(new_folder_path):
-                        os.makedirs(new_folder_path)
-                    else:
-                        pass
-
-                    for jpg in jpgs:
-                        shutil.move(jpg, new_folder_path)
-                        break
                     if shot == shot_max:
-                        jpg_number = 1
                         break
-                    
-    temporary.clear()
-
 
     # キャプチャをリリース
     cap.release()
